@@ -11,7 +11,6 @@ import {
   listBrands,
   listCategories,
   listMovements,
-  movementTypeSchema,
   patchProduct,
   removeCompatibility,
   searchProducts,
@@ -28,9 +27,11 @@ import { useMediaQuery } from '../lib/useMediaQuery'
 import { ErrorBox } from '../ui/ErrorBox'
 import { Icon } from '../ui/Icon'
 
+const createMovementTypeSchema = z.enum(['PURCHASE', 'SALE', 'ADJUSTMENT'])
+
 const createMovementSchema = z
   .object({
-    type: movementTypeSchema,
+    type: createMovementTypeSchema,
     quantity: z.number().int(),
     referenceDoc: z.string().trim().min(1).max(120).nullable()
   })
@@ -358,13 +359,32 @@ export function ProductPage(props: { id: number }) {
       const parsed = parseTechnicalSpecs(p.technicalSpecs)
       const compatEnabled = p.kind !== 'MACHINE' || parsed.machineSubtype === null || parsed.machineSubtype === 'CHAINSAW'
 
+      const hasFrom = !!reportDateFrom.trim()
+      const hasTo = !!reportDateTo.trim()
+      const dateFrom = hasFrom && hasTo ? reportDateFrom.trim() : undefined
+      const dateTo = hasFrom && hasTo ? reportDateTo.trim() : undefined
+
       const [m, c] = await Promise.all([
-        listMovements({ productId: props.id, limit: 50 }),
+        listMovements({ productId: props.id, limit: 50, dateFrom, dateTo }),
         compatEnabled ? getCompatibilities(props.id) : Promise.resolve(null)
       ])
       setProduct(p)
       setMovements(m)
       setCompat(c)
+    } catch (err) {
+      setLoadError(err)
+    }
+  }
+
+  async function refreshMovementsOnly() {
+    setLoadError(null)
+    try {
+      const hasFrom = !!reportDateFrom.trim()
+      const hasTo = !!reportDateTo.trim()
+      const dateFrom = hasFrom && hasTo ? reportDateFrom.trim() : undefined
+      const dateTo = hasFrom && hasTo ? reportDateTo.trim() : undefined
+      const m = await listMovements({ productId: props.id, limit: 50, dateFrom, dateTo })
+      setMovements(m)
     } catch (err) {
       setLoadError(err)
     }
@@ -398,6 +418,14 @@ export function ProductPage(props: { id: number }) {
   useEffect(() => {
     refresh()
   }, [props.id])
+
+  useEffect(() => {
+    if (!movements) return
+    const hasFrom = !!reportDateFrom.trim()
+    const hasTo = !!reportDateTo.trim()
+    if ((hasFrom && !hasTo) || (!hasFrom && hasTo)) return
+    refreshMovementsOnly()
+  }, [reportDateFrom, reportDateTo])
 
   useEffect(() => {
     if (!product) return
@@ -1192,8 +1220,7 @@ export function ProductPage(props: { id: number }) {
                   <option value="ALL">Todos</option>
                   <option value="PURCHASE">Compra (entrada)</option>
                   <option value="SALE">Venta (salida)</option>
-                  <option value="WORKSHOP">Taller (salida)</option>
-                  <option value="ADJUSTMENT">Ajuste (+/-)</option>
+                  <option value="ADJUSTMENT">Ajuste</option>
                 </select>
               </label>
               <label className="field">
@@ -1808,8 +1835,7 @@ export function ProductPage(props: { id: number }) {
                   <select value={type} onChange={(e) => setType(e.target.value as MovementType)}>
                     <option value="PURCHASE">Compra (entrada)</option>
                     <option value="SALE">Venta (salida)</option>
-                    <option value="WORKSHOP">Taller (salida)</option>
-                    <option value="ADJUSTMENT">Ajuste (+/-)</option>
+                    <option value="ADJUSTMENT">Ajuste</option>
                   </select>
                 </label>
                 <label className="field">
