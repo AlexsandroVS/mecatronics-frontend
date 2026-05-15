@@ -34,7 +34,12 @@ const errorSchema = z.object({
 
 function apiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_URL as string | undefined
-  return raw?.replace(/\/+$/, '') ?? 'http://localhost:3000'
+  const cleaned = raw
+    ?.trim()
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .replace(/\.+$/, '')
+    .replace(/\/+$/, '')
+  return cleaned || 'http://localhost:3000'
 }
 
 export async function apiFetch<TResponse>(input: { path: string; init?: RequestInit; parse: (data: unknown) => TResponse }): Promise<TResponse> {
